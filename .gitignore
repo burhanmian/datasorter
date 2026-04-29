@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+*.pyo
+.env
+dist/
+build/
+*.spec
+.checkpoint.json
+*.log
+models/*.pth
