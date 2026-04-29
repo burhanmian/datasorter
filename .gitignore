@@ -8,3 +8,4 @@ build/
 .checkpoint.json
 *.log
 models/*.pth
+models/.download_attempted

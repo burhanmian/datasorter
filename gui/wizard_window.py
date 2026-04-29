@@ -93,6 +93,31 @@ class WizardWindow(ctk.CTk):
         self._next_btn = make_primary_button(nav, "Next →", command=self._go_next, width=140)
         self._next_btn.pack(side="right")
 
+        # Preset loader (centre of nav bar)
+        self._build_preset_loader(nav)
+
+    def _build_preset_loader(self, parent):
+        from utils.config import list_presets, load_preset
+        presets = list_presets()
+        if not presets:
+            return
+        preset_frame = ctk.CTkFrame(parent, fg_color="transparent")
+        preset_frame.pack(side="left", padx=(16, 0))
+        ctk.CTkLabel(preset_frame, text="Load preset:", font=ctk.CTkFont(size=11)).pack(side="left", padx=(0, 6))
+        preset_var = ctk.StringVar(value=presets[0])
+        menu = ctk.CTkOptionMenu(preset_frame, values=presets, variable=preset_var, width=140)
+        menu.pack(side="left")
+        def do_load():
+            cfg = load_preset(preset_var.get())
+            if cfg:
+                # Copy all fields from loaded preset into current config
+                import dataclasses
+                for f in dataclasses.fields(cfg):
+                    setattr(self.cfg, f.name, getattr(cfg, f.name))
+                self._show_step(self._step)  # refresh current step UI
+        ctk.CTkButton(preset_frame, text="Apply", width=60, height=28,
+                      command=do_load, font=ctk.CTkFont(size=11)).pack(side="left", padx=(4, 0))
+
     def _clear_content(self):
         for w in self._content.winfo_children():
             w.destroy()

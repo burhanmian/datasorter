@@ -136,9 +136,11 @@ class WelcomeWindow(ctk.CTk):
         self.on_mode_selected(mode)
 
     def _toggle_theme(self):
+        from utils.config import save_settings
         new = "light" if self.config_obj.theme == "dark" else "dark"
         self.config_obj.theme = new
         apply_theme(new)
+        save_settings(self.config_obj)
 
     def _show_help(self):
         win = ctk.CTkToplevel(self)

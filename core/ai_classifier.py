@@ -61,13 +61,13 @@ def _load_model():
         net = models.resnet18(weights=None)
         net.fc = nn.Linear(net.fc.in_features, len(BODY_PARTS))
 
-        if MODEL_PATH.exists():
+        if MODEL_PATH.exists() and MODEL_PATH.stat().st_size > 1024:
             state = torch.load(str(MODEL_PATH), map_location="cpu")
             net.load_state_dict(state, strict=False)
             log.info("AI classifier: loaded weights from %s", MODEL_PATH)
         else:
             log.warning(
-                "AI classifier: no pre-trained weights found at %s. "
+                "AI classifier: no valid weights at %s. "
                 "Using ImageNet-only features — accuracy will be limited.",
                 MODEL_PATH,
             )

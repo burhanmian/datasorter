@@ -59,7 +59,6 @@ def _ensure_deps():
 _ensure_deps()
 
 # --- Launch GUI ---
-import tkinter as tk
 from utils.config import load_settings, save_settings, SortConfig
 from utils.logger import setup_logger, get_logger
 
@@ -98,17 +97,7 @@ def _open_results(parent_win, config: SortConfig, stats):
     parent_win.destroy()
     from gui.results_window import ResultsWindow
 
-    def on_sort_more():
-        launch_welcome()
-
-    res = ResultsWindow(config, stats, on_sort_more=on_sort_more)
-
-    # Add review button if needed
-    if stats.review_needed > 0:
-        from gui.review_window import ReviewWindow
-        review_btn_frame = tk.Frame(res, bg="#2B3038")
-        review_btn_frame.pack()
-
+    res = ResultsWindow(config, stats, on_sort_more=launch_welcome)
     res.mainloop()
 
 

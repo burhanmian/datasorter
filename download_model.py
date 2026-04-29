@@ -11,20 +11,24 @@ from pathlib import Path
 
 MODEL_DIR = Path(__file__).parent / "models"
 MODEL_PATH = MODEL_DIR / "body_part_classifier.pth"
+MARKER_PATH = MODEL_DIR / ".download_attempted"  # prevents re-download on failure
 
-# Publicly hosted model weights (ResNet18 fine-tuned for body-part classification)
-# These are ImageNet-pre-trained weights — replace URL with actual fine-tuned model
-# when available.  The app works without them (falls back to heuristics).
-MODEL_URL = (
-    "https://download.pytorch.org/models/resnet18-f37072fd.pth"
-    # Replace with actual body-part-tuned weights URL
-)
+# ImageNet-pre-trained ResNet18 — used as the base for body-part classification.
+# Replace URL with actual fine-tuned weights when available.
+# The app falls back to heuristics if this file is absent or invalid.
+MODEL_URL = "https://download.pytorch.org/models/resnet18-f37072fd.pth"
 
 
 def download_model():
-    if MODEL_PATH.exists():
+    # Already have valid weights
+    if MODEL_PATH.exists() and MODEL_PATH.stat().st_size > 1024:
         print("[AI Model] Already present.")
         return True
+
+    # Don't retry if we already tried and failed this session
+    if MARKER_PATH.exists():
+        print("[AI Model] Previous download failed — skipping. Heuristics will be used.")
+        return False
 
     MODEL_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -46,8 +50,10 @@ def download_model():
     except Exception as exc:
         print(f"\n[AI Model] Download failed: {exc}")
         print("[AI Model] The app will use heuristic detection only.")
-        # Create a placeholder so we don't re-attempt every launch
-        MODEL_PATH.write_bytes(b"")
+        # Mark so we skip on next launch (avoids hanging on no-internet systems)
+        MARKER_PATH.write_text("failed")
+        if MODEL_PATH.exists():
+            MODEL_PATH.unlink()
         return False
 
 

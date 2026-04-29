@@ -45,12 +45,14 @@ if %ERRORLEVEL% NEQ 0 (
     echo [OK] Packages installed successfully.
 )
 
-:: Check / download AI model on first run
-python -c "import os; exit(0 if os.path.exists('models/body_part_classifier.pth') else 1)" >nul 2>&1
+:: Check / download AI model on first run (skip if already downloaded or previously failed)
+python -c "import os; p='models/body_part_classifier.pth'; exit(0 if os.path.exists(p) and os.path.getsize(p)>1024 else 1)" >nul 2>&1
 if %ERRORLEVEL% NEQ 0 (
-    echo.
-    echo [INFO] Downloading AI body part detection model...
-    python download_model.py
+    if not exist "models\.download_attempted" (
+        echo.
+        echo [INFO] Downloading AI body part detection model ^(first time only^)...
+        python download_model.py
+    )
 )
 
 echo.

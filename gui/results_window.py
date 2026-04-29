@@ -71,13 +71,20 @@ class ResultsWindow(ctk.CTk):
         if self.stats.review_needed > 0:
             warn = make_card(scroll)
             warn.pack(fill="x", pady=(16, 0))
+            warn_inner = ctk.CTkFrame(warn, fg_color="transparent")
+            warn_inner.pack(fill="x", padx=16, pady=10)
             ctk.CTkLabel(
-                warn,
+                warn_inner,
                 text=f"⚠️  {self.stats.review_needed} files need manual review — "
-                     f"they are in the _Review_Needed/ folder.",
+                     f"confidence was too low to sort automatically.",
                 text_color=WARNING,
                 font=ctk.CTkFont(size=13, weight="bold"),
-            ).pack(padx=16, pady=12)
+                wraplength=620,
+            ).pack(side="left", fill="x", expand=True)
+            make_primary_button(
+                warn_inner, "🔍 Open Review Tool",
+                command=self._open_review_tool, width=180,
+            ).pack(side="right", padx=(12, 0))
 
         # Charts row
         charts_row = ctk.CTkFrame(scroll, fg_color="transparent")
@@ -191,6 +198,10 @@ class ResultsWindow(ctk.CTk):
         self.destroy()
         if self.on_sort_more:
             self.on_sort_more()
+
+    def _open_review_tool(self):
+        from gui.review_window import ReviewWindow
+        ReviewWindow(self, self.cfg.destination_folder, self.cfg)
 
     def _save_preset(self):
         from utils.config import save_preset

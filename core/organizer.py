@@ -193,17 +193,19 @@ class Organizer:
         # Build destination path
         rel_path = self._build_rel_path(cfg, modality, detection, sub_type, meta)
 
-        dest_path = file_ops.transfer_file(fpath, Path(rel_path) / fpath.name, meta.sop_instance_uid)
-
-        if dest_path is None and not cfg.preview_only:
-            self.stats.errors += 1
-            return
-
-        # Handle review folder
+        # Uncertain files go to review instead of the body-part folder
         if detection.needs_review and cfg.move_uncertain_to_review:
-            review_path = file_ops.move_to_review(fpath)
+            dest_path = file_ops.transfer_file(
+                fpath, Path("_Review_Needed") / fpath.name, meta.sop_instance_uid
+            )
             self.stats.review_needed += 1
         else:
+            dest_path = file_ops.transfer_file(
+                fpath, Path(rel_path) / fpath.name, meta.sop_instance_uid
+            )
+            if dest_path is None and not cfg.preview_only:
+                self.stats.errors += 1
+                return
             self.stats.sorted_ok += 1
 
         # Update stats
