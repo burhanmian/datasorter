@@ -1,10 +1,9 @@
 """
 Logging utilities for DICOM Organizer.
-Provides file + GUI-streamed logging.
+Provides file + GUI-streamed logging with duplicate-handler protection.
 """
 import logging
 import queue
-import threading
 from pathlib import Path
 from datetime import datetime
 
@@ -21,7 +20,7 @@ class QueueHandler(logging.Handler):
 
 
 _log_queue: queue.Queue = queue.Queue()
-_logger_initialized = False
+_file_handler_added = False
 
 
 def get_log_queue() -> queue.Queue:
@@ -29,38 +28,48 @@ def get_log_queue() -> queue.Queue:
 
 
 def setup_logger(log_dir: Path | None = None) -> logging.Logger:
-    global _logger_initialized
+    """
+    Configure the application logger.  Safe to call multiple times:
+    - Console + queue handlers are added only once.
+    - A file handler is added only once per session (first call with log_dir wins).
+    """
+    global _file_handler_added
 
     logger = logging.getLogger("dicom_organizer")
-    if _logger_initialized:
-        return logger
-
     logger.setLevel(logging.DEBUG)
+
     fmt = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s", "%H:%M:%S")
 
-    # Console handler (for development)
-    ch = logging.StreamHandler()
-    ch.setLevel(logging.INFO)
-    ch.setFormatter(fmt)
-    logger.addHandler(ch)
+    # Determine which handler types are already attached
+    existing_types = {type(h) for h in logger.handlers}
 
-    # Queue handler (for GUI live log)
-    qh = QueueHandler(_log_queue)
-    qh.setLevel(logging.INFO)
-    qh.setFormatter(fmt)
-    logger.addHandler(qh)
+    # Console handler — added once
+    if logging.StreamHandler not in existing_types:
+        ch = logging.StreamHandler()
+        ch.setLevel(logging.INFO)
+        ch.setFormatter(fmt)
+        logger.addHandler(ch)
 
-    # File handler (always write to log file)
-    if log_dir:
+    # Queue handler — added once
+    if QueueHandler not in existing_types:
+        qh = QueueHandler(_log_queue)
+        qh.setLevel(logging.INFO)
+        qh.setFormatter(fmt)
+        logger.addHandler(qh)
+
+    # File handler — added once per session when a directory is provided
+    if log_dir and not _file_handler_added:
         log_dir = Path(log_dir)
         log_dir.mkdir(parents=True, exist_ok=True)
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-        fh = logging.FileHandler(log_dir / f"dicom_organizer_{ts}.log", encoding="utf-8")
+        fh = logging.FileHandler(
+            log_dir / f"dicom_organizer_{ts}.log", encoding="utf-8"
+        )
         fh.setLevel(logging.DEBUG)
         fh.setFormatter(fmt)
         logger.addHandler(fh)
+        _file_handler_added = True
 
-    _logger_initialized = True
     return logger
 
 

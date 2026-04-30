@@ -1,0 +1,7 @@
+# Optional — AI body part detection (installed via bootstrapper checkbox)
+# CPU version (~220 MB):
+#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+# GPU/CUDA version (~2.5 GB):
+#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
+torch
+torchvision
