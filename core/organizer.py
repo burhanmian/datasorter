@@ -4,6 +4,8 @@ callbacks so the GUI stays responsive.
 """
 from __future__ import annotations
 
+import os
+import tempfile
 import threading
 import time
 from dataclasses import dataclass, field
@@ -49,28 +51,26 @@ class Organizer:
         on_file_done: Optional[Callable[[str, str, float], None]] = None,
         on_phase: Optional[Callable[[str], None]] = None,
         on_log: Optional[Callable[[str], None]] = None,
-        on_done: Optional[Callable[[OrganizerStats], None]] = None,
+        on_done: Optional[Callable[["OrganizerStats"], None]] = None,
         on_error: Optional[Callable[[str], None]] = None,
     ):
         self.config = config
-        self.on_progress = on_progress     # (current, total, filename)
-        self.on_file_done = on_file_done   # (body_part, method, confidence)
-        self.on_phase = on_phase           # phase name string
-        self.on_log = on_log               # log message string
-        self.on_done = on_done             # OrganizerStats
-        self.on_error = on_error           # error string
+        self.on_progress = on_progress
+        self.on_file_done = on_file_done
+        self.on_phase = on_phase
+        self.on_log = on_log
+        self.on_done = on_done
+        self.on_error = on_error
 
         self._stop_event = threading.Event()
         self._pause_event = threading.Event()
-        self._pause_event.set()            # not paused initially
+        self._pause_event.set()   # not paused initially
 
         self.stats = OrganizerStats()
         self._manifest = ManifestBuilder()
         self._thread: Optional[threading.Thread] = None
 
-    # ------------------------------------------------------------------
-    # Control
-    # ------------------------------------------------------------------
+    # ── Control ───────────────────────────────────────────────────────────────
     def start(self):
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
@@ -83,14 +83,12 @@ class Organizer:
 
     def cancel(self):
         self._stop_event.set()
-        self._pause_event.set()   # unblock if paused
+        self._pause_event.set()
 
     def is_running(self):
         return self._thread is not None and self._thread.is_alive()
 
-    # ------------------------------------------------------------------
-    # Internal pipeline
-    # ------------------------------------------------------------------
+    # ── Internal pipeline ─────────────────────────────────────────────────────
     def _emit_log(self, msg: str):
         log.info(msg)
         if self.on_log:
@@ -101,7 +99,7 @@ class Organizer:
             self.on_phase(phase)
 
     def _run(self):
-        cfg = self.config
+        cfg  = self.config
         dest = Path(cfg.destination_folder)
 
         setup_logger(dest / "reports" / "_logs")
@@ -111,7 +109,7 @@ class Organizer:
             preview_only=cfg.preview_only,
         )
 
-        # ---- Phase 1: Scan ----
+        # Phase 1 — scan
         self._emit_phase("Scanning for DICOM files…")
         self._emit_log(f"Scanning: {cfg.source_folder}")
         all_files = find_dicom_files(cfg.source_folder, recursive=cfg.recursive)
@@ -121,20 +119,17 @@ class Organizer:
         if self._stop_event.is_set():
             return
 
-        # ---- Phase 2: Process each file ----
+        # Phase 2 — process files
         self._emit_phase("Reading & detecting body parts…")
-
         for idx, fpath in enumerate(all_files):
-            self._pause_event.wait()   # blocks if paused
+            self._pause_event.wait()
             if self._stop_event.is_set():
                 break
-
             if self.on_progress:
                 self.on_progress(idx + 1, self.stats.total, fpath.name)
-
             self._process_file(fpath, file_ops, cfg)
 
-        # ---- Phase 3: Manifest & reports ----
+        # Phase 3 — manifest + reports
         if not self._stop_event.is_set():
             self._emit_phase("Saving manifest & reports…")
             reports_dir = dest / "reports"
@@ -150,7 +145,6 @@ class Organizer:
     def _process_file(self, fpath: Path, file_ops: FileOperations, cfg: SortConfig):
         # Read metadata
         meta = read_dicom(fpath)
-
         if not meta.is_valid:
             self._emit_log(f"ERROR reading {fpath.name}: {meta.error_message}")
             file_ops.move_to_errors(fpath, meta.error_message)
@@ -162,8 +156,8 @@ class Organizer:
             self.stats.skipped += 1
             return
 
-        # Classify modality
-        modality = classify_modality(meta)
+        # Modality filter
+        modality  = classify_modality(meta)
         scan_type = cfg.scan_type.upper()
         if scan_type == "MRI" and modality != "MR":
             self.stats.skipped += 1
@@ -171,10 +165,8 @@ class Organizer:
         if scan_type == "CT" and modality != "CT":
             self.stats.skipped += 1
             return
-        if scan_type not in ("MRI", "CT", "BOTH", "AUTO"):
-            pass  # accept all
 
-        # Load representative pixel slices for AI/heuristic
+        # Pixel slices for AI/heuristic
         pixel_slices: list[np.ndarray] = []
         if cfg.enable_ai_detection:
             pixel_slices = self._load_pixel_slices(fpath)
@@ -187,76 +179,114 @@ class Organizer:
             pixel_slices=pixel_slices,
         )
 
-        # Sub-type (MRI sequence / CT contrast)
         sub_type = get_sub_type(meta, modality)
 
-        # Build destination path
-        rel_path = self._build_rel_path(cfg, modality, detection, sub_type, meta)
+        # Anonymize in dataset mode
+        anon_id = meta.patient_id or "UNKNOWN"
+        src_to_transfer = fpath
+        tmp_path: Optional[Path] = None
 
-        # Uncertain files go to review instead of the body-part folder
+        if cfg.mode == "dataset" and cfg.enable_anonymization:
+            try:
+                ds = pydicom.dcmread(str(fpath), force=True)
+                pid = str(getattr(ds, "PatientID", "UNKNOWN"))
+                from core.anonymizer import anonymize_dataset
+                anon_id = anonymize_dataset(ds, pid)
+                tmp_fd, tmp_str = tempfile.mkstemp(suffix=".dcm")
+                os.close(tmp_fd)
+                tmp_path = Path(tmp_str)
+                ds.save_as(str(tmp_path))
+                src_to_transfer = tmp_path
+            except Exception as exc:
+                log.warning("Anonymization failed for %s: %s", fpath.name, exc)
+                tmp_path = None
+                src_to_transfer = fpath
+
+        # Build destination path
+        rel_path = self._build_rel_path(cfg, modality, detection, sub_type, meta, anon_id)
+
+        # Transfer file (review vs. normal)
+        dest_path: Optional[Path] = None
         if detection.needs_review and cfg.move_uncertain_to_review:
             dest_path = file_ops.transfer_file(
-                fpath, Path("_Review_Needed") / fpath.name, meta.sop_instance_uid
+                src_to_transfer,
+                Path("_Review_Needed") / fpath.name,
+                meta.sop_instance_uid,
             )
             self.stats.review_needed += 1
         else:
             dest_path = file_ops.transfer_file(
-                fpath, Path(rel_path) / fpath.name, meta.sop_instance_uid
+                src_to_transfer,
+                Path(rel_path) / fpath.name,
+                meta.sop_instance_uid,
             )
             if dest_path is None and not cfg.preview_only:
+                if tmp_path and tmp_path.exists():
+                    tmp_path.unlink(missing_ok=True)
                 self.stats.errors += 1
                 return
             self.stats.sorted_ok += 1
 
+        # Clean up temp anonymized file
+        if tmp_path and tmp_path.exists():
+            try:
+                tmp_path.unlink(missing_ok=True)
+            except Exception:
+                pass
+
+        # PNG preview per file (dataset mode)
+        if (cfg.mode == "dataset" and cfg.enable_png_previews
+                and dest_path and not cfg.preview_only):
+            self._generate_png_preview(fpath, rel_path)
+
         # Update stats
-        bp = detection.body_part
-        self.stats.body_part_counts[bp] = self.stats.body_part_counts.get(bp, 0) + 1
+        bp     = detection.body_part
         method = detection.method
-        self.stats.method_counts[method] = self.stats.method_counts.get(method, 0) + 1
+        self.stats.body_part_counts[bp]     = self.stats.body_part_counts.get(bp, 0) + 1
+        self.stats.method_counts[method]    = self.stats.method_counts.get(method, 0) + 1
 
         if self.on_file_done:
             self.on_file_done(bp, method, detection.confidence)
 
         # Manifest row
         self._manifest.add({
-            "file_path": str(fpath),
-            "relative_path": str(rel_path),
-            "anonymized_id": meta.patient_id,
-            "modality": modality,
-            "detected_body_part": bp,
-            "detection_method": method,
-            "confidence_score": round(detection.confidence, 4),
-            "alternative_guesses": str(detection.alternatives[:3]),
-            "sequence_or_contrast_type": sub_type,
-            "study_date": meta.study_date,
-            "series_uid": meta.series_instance_uid,
-            "series_number": meta.series_number,
-            "slice_count": "",
-            "rows": meta.rows,
-            "columns": meta.columns,
-            "pixel_spacing_x": meta.pixel_spacing_x,
-            "pixel_spacing_y": meta.pixel_spacing_y,
-            "slice_thickness": meta.slice_thickness,
-            "manufacturer": meta.manufacturer,
-            "model": meta.manufacturer_model_name,
-            "field_strength_or_kvp": meta.magnetic_field_strength or meta.kvp,
-            "patient_age": meta.patient_age,
-            "patient_sex": meta.patient_sex,
-            "split_assignment": "",
-            "label": "",
-            "notes": "",
+            "file_path":                  str(fpath),
+            "relative_path":              str(rel_path),
+            "anonymized_id":              anon_id,
+            "modality":                   modality,
+            "detected_body_part":         bp,
+            "detection_method":           method,
+            "confidence_score":           round(detection.confidence, 4),
+            "alternative_guesses":        str(detection.alternatives[:3]),
+            "sequence_or_contrast_type":  sub_type,
+            "study_date":                 meta.study_date,
+            "series_uid":                 meta.series_instance_uid,
+            "series_number":              meta.series_number,
+            "slice_count":                "",
+            "rows":                       meta.rows,
+            "columns":                    meta.columns,
+            "pixel_spacing_x":            meta.pixel_spacing_x,
+            "pixel_spacing_y":            meta.pixel_spacing_y,
+            "slice_thickness":            meta.slice_thickness,
+            "manufacturer":               meta.manufacturer,
+            "model":                      meta.manufacturer_model_name,
+            "field_strength_or_kvp":      meta.magnetic_field_strength or meta.kvp,
+            "patient_age":                meta.patient_age,
+            "patient_sex":                meta.patient_sex,
+            "split_assignment":           "",
+            "label":                      "",
+            "notes":                      "",
         })
 
+    # ── Helpers ───────────────────────────────────────────────────────────────
+
     def _load_pixel_slices(self, fpath: Path) -> list[np.ndarray]:
-        """Load up to 3 representative slices from a DICOM file."""
         try:
-            import pydicom
-            ds = pydicom.dcmread(str(fpath), force=True)
+            ds  = pydicom.dcmread(str(fpath), force=True)
             arr = ds.pixel_array
             if arr.ndim == 2:
                 return [arr]
-            slices = [arr[0], arr[arr.shape[0] // 2], arr[-1]]
-            return slices
+            return [arr[0], arr[arr.shape[0] // 2], arr[-1]]
         except Exception:
             return []
 
@@ -267,14 +297,13 @@ class Organizer:
         detection: DetectionResult,
         sub_type: str,
         meta: DicomMetadata,
+        anon_id: str = "",
     ) -> str:
-        """Build relative destination path based on mode."""
-        mod_label = "MRI" if modality == "MR" else ("CT" if modality == "CT" else modality)
-        body_part = detection.body_part
-
+        mod_label  = "MRI" if modality == "MR" else ("CT" if modality == "CT" else modality)
+        body_part  = detection.body_part
         patient_id = safe_filename(meta.patient_id or "UNKNOWN")
         study_date = safe_filename(meta.study_date or "NoDate")
-        series_n = safe_filename(meta.series_number or "0")
+        series_n   = safe_filename(str(meta.series_number or "0"))
         series_desc = slugify(meta.series_description or "Series", 32)
 
         if cfg.mode == "simple":
@@ -284,24 +313,67 @@ class Organizer:
                 f"/Series_{series_n}_{series_desc}"
             )
         else:
-            # Dataset mode
-            ds_name = safe_filename(cfg.dataset_name)
-            anon_id = safe_filename(meta.patient_id)
+            ds_name  = safe_filename(cfg.dataset_name)
+            used_id  = safe_filename(anon_id or patient_id)
             return (
                 f"{ds_name}/raw/{mod_label}/{body_part}/{sub_type}"
-                f"/{anon_id}/{study_date}/Series_{series_n}"
+                f"/{used_id}/{study_date}/Series_{series_n}"
             )
 
+    def _generate_png_preview(self, fpath: Path, rel_path: str):
+        from core.converter import save_png_preview
+        try:
+            ds  = pydicom.dcmread(str(fpath), force=True)
+            arr = ds.pixel_array
+            ds_name = safe_filename(self.config.dataset_name)
+            preview_dir = (
+                Path(self.config.destination_folder)
+                / ds_name / "processed" / "png_previews"
+            )
+            # Flatten rel_path to a safe directory name
+            flat = rel_path.replace("/", "_").replace("\\", "_")
+            preview_path = preview_dir / flat / (fpath.stem + ".png")
+            save_png_preview(arr, preview_path)
+        except Exception as exc:
+            log.debug("PNG preview skipped for %s: %s", fpath.name, exc)
+
+    # ── Dataset finalisation ──────────────────────────────────────────────────
+
     def _do_dataset_finalization(self, dest: Path, cfg: SortConfig):
-        """Dataset-mode extras: NIfTI conversion, PNG previews, splitting."""
-        from core.splitter import split_dataset
         import pandas as pd
+        from core.splitter import split_dataset
 
         df = self._manifest.to_dataframe()
         if df.empty:
             return
 
-        # Train/val/test split
+        # NIfTI conversion (series-level)
+        if cfg.enable_nifti:
+            self._emit_phase("Converting DICOM series to NIfTI…")
+            from core.converter import convert_series_to_nifti
+            ds_name  = safe_filename(cfg.dataset_name)
+            raw_dir  = dest / ds_name / "raw"
+            nifti_dir = dest / ds_name / "processed" / "nifti"
+            if raw_dir.exists():
+                for series_dir in sorted(raw_dir.rglob("Series_*")):
+                    if self._stop_event.is_set():
+                        break
+                    if series_dir.is_dir():
+                        rel       = series_dir.relative_to(raw_dir)
+                        nii_name  = str(rel).replace(os.sep, "_") + ".nii.gz"
+                        out_path  = nifti_dir / nii_name
+                        self._emit_log(f"  NIfTI: {series_dir.name}")
+                        convert_series_to_nifti(series_dir, out_path)
+
+        # Save anonymisation mapping
+        if cfg.enable_anonymization:
+            try:
+                from core.anonymizer import save_mapping
+                save_mapping(dest / "reports")
+            except Exception as exc:
+                log.warning("Could not save anon mapping: %s", exc)
+
+        # Train / val / test split
         self._emit_phase("Splitting dataset…")
         split_dataset(
             df,
@@ -316,9 +388,9 @@ class Organizer:
 
     def _generate_readme(self, dest: Path, cfg: SortConfig, df):
         from datetime import datetime
-        bp_counts = df["detected_body_part"].value_counts().to_dict()
+        bp_counts  = df["detected_body_part"].value_counts().to_dict()
         table_rows = "\n".join(f"| {k} | {v} |" for k, v in bp_counts.items())
-        ds_name = safe_filename(cfg.dataset_name)
+        ds_name    = safe_filename(cfg.dataset_name)
 
         readme = f"""# {cfg.dataset_name}
 
@@ -355,6 +427,7 @@ class Organizer:
 
 Each row represents one DICOM file and includes:
 - `file_path` — original location
+- `anonymized_id` — hashed patient ID (PHI-free)
 - `detected_body_part` — automatically detected body part
 - `detection_method` — metadata | ai | heuristic | manual
 - `confidence_score` — 0.0 to 1.0
@@ -371,39 +444,16 @@ brain_files = manifest[manifest["detected_body_part"] == "Brain"]["file_path"].t
 
 for fp in brain_files:
     ds = pydicom.dcmread(fp)
-    arr = ds.pixel_array  # numpy array
-    # ... normalise & convert to tensor
-```
-
-## MONAI Loading Snippet
-
-```python
-from monai.data import Dataset, DataLoader
-from monai.transforms import LoadImaged, EnsureChannelFirstd, ScaleIntensityd, Compose
-
-manifest = pd.read_csv("{ds_name}/splits/train.csv")
-brain_df = manifest[manifest["detected_body_part"] == "Brain"]
-data = [{{"image": r["file_path"]}} for _, r in brain_df.iterrows()]
-
-transforms = Compose([LoadImaged(keys=["image"]), EnsureChannelFirstd(keys=["image"]),
-                      ScaleIntensityd(keys=["image"])])
-dataset = Dataset(data=data, transform=transforms)
-loader = DataLoader(dataset, batch_size=4)
+    arr = ds.pixel_array   # numpy array
+    # normalise & convert to tensor ...
 ```
 
 ## Detection Accuracy Notes
 
 - **Metadata-based** detection (confidence ≥ 0.85) is the most reliable.
-- **AI-based** detection works best when metadata is absent; accuracy depends on
-  the pre-trained weights in `models/body_part_classifier.pth`.
-- **Heuristic** detection is a fallback with ~60–70% accuracy.
-- Files with confidence < 0.5 are placed in `_review_needed/` for manual verification.
-
-## Known Limitations
-
-- Multi-modality files (e.g. PET-CT) may be split across folders.
-- Very non-standard vendor field names may not be parsed correctly.
-- AI detection requires PyTorch; if unavailable, falls back to heuristics.
+- **AI-based** detection works best when metadata is absent.
+- **Heuristic** detection is a fallback with ~60–70 % accuracy.
+- Files with confidence < 0.5 are placed in `_Review_Needed/` for manual verification.
 """
         readme_path = dest / ds_name / "README.md"
         readme_path.parent.mkdir(parents=True, exist_ok=True)

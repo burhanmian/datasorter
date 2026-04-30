@@ -2,10 +2,13 @@
 Logging utilities for DICOM Organizer.
 Provides file + GUI-streamed logging with duplicate-handler protection.
 """
+from __future__ import annotations
+
 import logging
 import queue
 from pathlib import Path
 from datetime import datetime
+from typing import Optional
 
 
 class QueueHandler(logging.Handler):
@@ -27,7 +30,7 @@ def get_log_queue() -> queue.Queue:
     return _log_queue
 
 
-def setup_logger(log_dir: Path | None = None) -> logging.Logger:
+def setup_logger(log_dir: Optional[Path] = None) -> logging.Logger:
     """
     Configure the application logger.  Safe to call multiple times:
     - Console + queue handlers are added only once.

@@ -243,16 +243,20 @@ class ResultsWindow(ctk.CTk):
             try:
                 import pandas as pd
                 df = pd.read_csv(manifest)
-                for _, row in df.iterrows():
+                for i, row in df.iterrows():
                     bp   = str(row.get("detected_body_part", ""))
-                    conf = row.get("confidence_score", 0)
                     meth = str(row.get("detection_method", ""))
                     fp   = str(row.get("file_path", ""))
+                    try:
+                        conf_f = float(row.get("confidence_score", 0) or 0)
+                    except (ValueError, TypeError):
+                        conf_f = 0.0
+                    # iid must be unique; fall back to row index if path empty
+                    iid = fp if fp else f"__row_{i}"
                     self._tree.insert(
-                        "", "end",
-                        iid=fp,
-                        values=(bp, f"{float(conf):.0%}", meth),
-                        tags=("low",) if float(conf) < 0.5 else (),
+                        "", "end", iid=iid,
+                        values=(bp, f"{conf_f:.0%}", meth),
+                        tags=("low",) if conf_f < 0.5 else (),
                     )
                 self._tree.tag_configure("low", foreground=WARNING)
                 return
@@ -285,7 +289,12 @@ class ResultsWindow(ctk.CTk):
     def _reassign_dialog(self):
         file_path = self._ctx_file
         if not Path(file_path).exists():
-            ctk.CTkToplevel(self).destroy()
+            from tkinter import messagebox
+            messagebox.showwarning(
+                "File Not Found",
+                f"Cannot reassign — file no longer exists at:\n{file_path}",
+                parent=self,
+            )
             return
 
         win = ctk.CTkToplevel(self)

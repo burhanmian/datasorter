@@ -37,8 +37,17 @@ def split_dataset(
 
     # Get unique patients; stratify by dominant body_part
     patient_col = "anonymized_id" if "anonymized_id" in manifest.columns else "patient_id"
+    if patient_col not in manifest.columns:
+        # Last-resort fallback: treat every row as its own patient
+        manifest = manifest.copy()
+        manifest[patient_col] = range(len(manifest))
+
+    def _dominant(x: pd.Series) -> str:
+        m = x.mode()
+        return m.iloc[0] if len(m) > 0 else "Other"
+
     patients = manifest.groupby(patient_col)["detected_body_part"].agg(
-        lambda x: x.mode()[0] if not x.empty else "Other"
+        _dominant
     ).reset_index()
     patients.columns = [patient_col, "stratum"]
 

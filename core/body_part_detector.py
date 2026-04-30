@@ -249,7 +249,7 @@ def detect_body_part(
     best_conf = min(part_scores[best] / len(all_candidates), 0.75)
 
     needs_review = best_conf < 0.5 or best == "Other_Unknown"
-    final_label = f"Uncertain_{best}" if needs_review else best
+    final_label = best  # keep clean name; needs_review flag handles routing to _Review_Needed/
 
     alts = sorted(
         [(p, c) for p, c in part_scores.items() if p != best],
