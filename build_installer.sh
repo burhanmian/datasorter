@@ -20,12 +20,12 @@ fi
 
 # Install PyInstaller
 echo "  [1/3] Installing PyInstaller..."
-pip3 install pyinstaller --quiet --upgrade
+python3 -m pip install pyinstaller --quiet --upgrade
 
 echo "  [2/3] Building DICOM_Organizer_Setup..."
 echo ""
 
-pyinstaller \
+python3 -m PyInstaller \
     --onefile \
     --windowed \
     --name "DICOM_Organizer_Setup" \

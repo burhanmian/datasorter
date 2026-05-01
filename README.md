@@ -109,19 +109,49 @@ The review tool shows:
 
 ## Building Standalone .exe
 
-To distribute the app without requiring Python:
+### Recommended: Automated build with virtual environment
 
+Run the all-in-one build script from the repository root:
+
+```bat
+build_windows.bat
 ```
+
+This script automatically:
+1. Creates a Python virtual environment (`.venv\`)
+2. Installs all required packages inside the venv
+3. Installs PyInstaller inside the venv
+4. Builds a **portable one-folder** distribution using `python -m PyInstaller`
+
+Output:
+```
+dist\DICOM_Organizer\DICOM_Organizer.exe   ← launch this
+dist\DICOM_Organizer\                       ← copy this whole folder to distribute
+```
+
+Copy the entire `dist\DICOM_Organizer\` folder to any Windows 10/11 machine and
+run `DICOM_Organizer.exe`. No Python installation required on the target machine.
+
+### Quick build (existing environment)
+
+If you already have PyInstaller installed in your active Python environment:
+
+```bat
+python -m PyInstaller DICOM_Organizer.spec --noconfirm --clean
+```
+
+### Legacy quick build (command-line flags)
+
+```bat
 build_exe.bat
 ```
 
-This uses PyInstaller to create `dist/DICOM_Organizer.exe` — a single file
-that runs on any Windows 10/11 machine.
+This also produces a portable one-folder build under `dist\DICOM_Organizer\`.
 
-**Note:** First install PyInstaller:
-```
-pip install pyinstaller
-```
+### Providing your own icon
+
+The default icon (`assets\icons\app_icon.ico`) is a simple placeholder.
+Replace it with your own 256×256 `.ico` file before building.
 
 ---
 

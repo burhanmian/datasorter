@@ -22,7 +22,7 @@ if errorlevel 1 (
 
 :: Install / upgrade PyInstaller
 echo  [1/3] Installing PyInstaller...
-pip install pyinstaller --quiet --upgrade
+python -m pip install pyinstaller --quiet --upgrade
 if errorlevel 1 (
     echo  ERROR: Could not install PyInstaller.
     pause
@@ -32,7 +32,7 @@ if errorlevel 1 (
 echo  [2/3] Building DICOM_Organizer_Setup.exe...
 echo.
 
-pyinstaller ^
+python -m PyInstaller ^
     --onefile ^
     --windowed ^
     --name "DICOM_Organizer_Setup" ^

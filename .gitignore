@@ -4,8 +4,11 @@ __pycache__/
 .env
 dist/
 build/
-*.spec
+# *.spec files are committed so do NOT ignore them globally
+# (PyInstaller-generated hook files may appear in build/ which is already ignored)
 .checkpoint.json
 *.log
 models/*.pth
 models/.download_attempted
+.venv/
+venv/
