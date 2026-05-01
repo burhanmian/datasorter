@@ -8,7 +8,7 @@ import os
 block_cipher = None
 
 _ico = os.path.join('assets', 'icons', 'app_icon.ico')
-_icon = [_ico] if os.path.isfile(_ico) else []
+_icon = _ico if os.path.isfile(_ico) else None
 
 # Paths are relative to the spec file location (repo root)
 a = Analysis(
@@ -16,7 +16,6 @@ a = Analysis(
     pathex=['.'],
     binaries=[],
     datas=[
-        *([(_ico, os.path.join('assets', 'icons'))] if os.path.isfile(_ico) else []),
         (os.path.join('assets'), 'assets'),
         (os.path.join('models'), 'models'),
         ('requirements.txt', '.'),

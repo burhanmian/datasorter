@@ -16,7 +16,7 @@ import os
 block_cipher = None
 
 _ico = os.path.join('assets', 'icons', 'app_icon.ico')
-_icon = [_ico] if os.path.isfile(_ico) else []
+_icon = _ico if os.path.isfile(_ico) else None
 
 a = Analysis(
     ['installer_gui.py'],
