@@ -39,14 +39,18 @@ APP_VERSION = "1.0"
 IS_WINDOWS  = sys.platform == "win32"
 IS_MAC      = sys.platform == "darwin"
 
-# Default install locations per platform
-if IS_WINDOWS:
-    _base = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local"))
-    DEFAULT_DIR = _base / "DICOMOrganizer"
-elif IS_MAC:
-    DEFAULT_DIR = Path.home() / "Applications" / "DICOMOrganizer"
-else:
-    DEFAULT_DIR = Path.home() / ".local" / "share" / "dicom-organizer"
+# Default install location: same folder as this installer EXE.
+# When bundled by PyInstaller sys.executable is the .exe file, so its parent
+# directory is the folder the user placed the installer in.
+# When running as a plain Python script the default is the script's own folder.
+def _default_install_dir() -> Path:
+    if hasattr(sys, "_MEIPASS"):
+        # Bundled EXE — install right next to the EXE
+        return Path(sys.executable).parent
+    # Running as a script — use the script's directory
+    return Path(__file__).parent
+
+DEFAULT_DIR = _default_install_dir()
 
 # Packages
 CORE_PACKAGES = [
@@ -416,8 +420,14 @@ class InstallerApp:
         f = tk.Frame(self._container, bg=BG)
         self._lbl(f, "Installation Directory", size=14, weight="bold").pack(
             pady=(24, 8), anchor="w", padx=36)
-        self._lbl(f, "Choose where DICOM Organizer will be installed:",
-                  color=MUTED).pack(anchor="w", padx=36, pady=(0, 10))
+        self._lbl(
+            f,
+            "By default DICOM Organizer installs in the same folder as this\n"
+            "installer — so you can place the setup file wherever you want\n"
+            "the app to live and everything stays together.\n"
+            "You can change the path below if you prefer a different location.",
+            color=MUTED, justify="left",
+        ).pack(anchor="w", padx=36, pady=(0, 10))
 
         row = tk.Frame(f, bg=BG)
         row.pack(fill="x", padx=36)

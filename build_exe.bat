@@ -12,17 +12,16 @@ if %ERRORLEVEL% NEQ 0 (
     python -m pip install pyinstaller --quiet
 )
 
-:: Clean previous build
+:: Clean previous build artefacts (keep spec file — it is version-controlled)
 if exist build rmdir /s /q build
 if exist dist rmdir /s /q dist
-if exist DICOM_Organizer.spec del DICOM_Organizer.spec
 
-echo Building...
+echo Building portable one-folder distribution...
 python -m PyInstaller ^
     --name "DICOM_Organizer" ^
-    --onefile ^
+    --onedir ^
     --windowed ^
-    --icon assets\icons\app_icon.ico ^
+    --icon "assets\icons\app_icon.ico" ^
     --add-data "requirements.txt;." ^
     --add-data "models;models" ^
     --add-data "assets;assets" ^
@@ -44,7 +43,8 @@ if %ERRORLEVEL% EQU 0 (
     echo.
     echo ============================================
     echo   SUCCESS!
-    echo   Executable: dist\DICOM_Organizer.exe
+    echo   Portable folder: dist\DICOM_Organizer\
+    echo   Executable:      dist\DICOM_Organizer\DICOM_Organizer.exe
     echo ============================================
 ) else (
     echo.
