@@ -211,12 +211,66 @@ class WizardWindow(ctk.CTk):
             self._show_step(prev)
 
     def _validate(self, step: int) -> bool:
-        if step == 0 and not self.cfg.source_folder:
-            self._error("Please select a source folder.")
-            return False
-        if step == 1 and not self.cfg.destination_folder:
-            self._error("Please select a destination folder.")
-            return False
+        import os
+        cfg = self.cfg
+
+        if step == 0:
+            if not cfg.source_folder:
+                self._error("Please select a source folder.")
+                return False
+            if not Path(cfg.source_folder).exists():
+                self._error(f"Source folder does not exist:\n{cfg.source_folder}")
+                return False
+
+        if step == 1:
+            if not cfg.destination_folder:
+                self._error("Please select a destination folder.")
+                return False
+            # Must not be the same as source
+            try:
+                src = Path(cfg.source_folder).resolve()
+                dst = Path(cfg.destination_folder).resolve()
+                if src == dst:
+                    self._error("Source and destination folders must be different.")
+                    return False
+                # Destination must not be inside source (would cause loops in move mode)
+                if dst.is_relative_to(src):
+                    self._error("Destination cannot be inside the source folder.")
+                    return False
+            except Exception:
+                pass
+            # Check write permission (create dir first if needed)
+            try:
+                Path(cfg.destination_folder).mkdir(parents=True, exist_ok=True)
+            except Exception:
+                pass
+            if not os.access(cfg.destination_folder, os.W_OK):
+                self._error(
+                    f"Cannot write to the destination folder:\n{cfg.destination_folder}\n\n"
+                    "Please choose a writable location."
+                )
+                return False
+
+        if step == 4 and cfg.mode == "dataset":
+            name = cfg.dataset_name.strip()
+            if not name:
+                self._error("Please enter a dataset name.")
+                return False
+            import re
+            if re.search(r'[<>:"/\\|?*]', name):
+                self._error(
+                    "Dataset name contains invalid characters.\n"
+                    "Avoid:  < > : \" / \\ | ? *"
+                )
+                return False
+            total = round(cfg.train_ratio + cfg.val_ratio + cfg.test_ratio, 6)
+            if abs(total - 1.0) > 0.01:
+                self._error(
+                    f"Train + Val + Test must add up to 100 %.\n"
+                    f"Current total: {total*100:.0f} %"
+                )
+                return False
+
         return True
 
     def _error(self, msg: str):
@@ -347,8 +401,19 @@ class WizardWindow(ctk.CTk):
         self._update_space(path)
 
     def _update_space(self, path: str):
+        import os
         free = get_free_space(path)
-        self._space_lbl.configure(text=f"Free space: {format_bytes(free)}")
+        try:
+            Path(path).mkdir(parents=True, exist_ok=True)
+        except Exception:
+            pass
+        writable = os.access(path, os.W_OK) if path else False
+        perm_txt = "  ✓ Writable" if writable else "  ✗ Not writable"
+        perm_col = SUCCESS if writable else WARNING
+        self._space_lbl.configure(
+            text=f"Free space: {format_bytes(free)}    {perm_txt}",
+            text_color=perm_col if not writable else MUTED,
+        )
 
     # ── Step 3 — Scan type ────────────────────────────────────────────────────
     def _step_scantype(self):
@@ -487,8 +552,21 @@ class WizardWindow(ctk.CTk):
             add_tooltip(cb, tip)
 
         make_section_label(self._content, "Train / Val / Test Split").pack(anchor="w", pady=(18, 4))
+        ctk.CTkLabel(
+            self._content,
+            text="Values must add up to 100 %.",
+            font=ctk.CTkFont(size=10), text_color=MUTED,
+        ).pack(anchor="w", pady=(0, 6))
+
         sr = ctk.CTkFrame(self._content, fg_color="transparent")
         sr.pack(anchor="w")
+
+        self._ratio_sum_lbl = ctk.CTkLabel(
+            self._content, text="Total: 100 %",
+            font=ctk.CTkFont(size=11, weight="bold"), text_color=SUCCESS,
+        )
+
+        ratio_svars: list[ctk.StringVar] = []
         for label, attr, default in [
             ("Train %", "train_ratio", self.cfg.train_ratio),
             ("Val %",   "val_ratio",   self.cfg.val_ratio),
@@ -499,11 +577,43 @@ class WizardWindow(ctk.CTk):
             ctk.CTkLabel(col, text=label, font=ctk.CTkFont(size=11, weight="bold")).pack()
             sv = ctk.StringVar(value=str(int(default * 100)))
             ctk.CTkEntry(col, textvariable=sv, width=70).pack()
+            ratio_svars.append(sv)
             sv.trace_add("write", lambda *_, a=attr, v=sv: self._update_ratio(a, v))
 
-    def _update_ratio(self, attr, sv):
+        self._ratio_sum_lbl.pack(anchor="w", pady=(6, 0))
+
+        # Random seed
+        make_section_label(self._content, "Random Seed  (for reproducible splits)").pack(
+            anchor="w", pady=(16, 4))
+        seed_row = ctk.CTkFrame(self._content, fg_color="transparent")
+        seed_row.pack(anchor="w")
+        ctk.CTkLabel(seed_row, text="Seed:", font=ctk.CTkFont(size=11)).pack(side="left", padx=(0, 8))
+        seed_sv = ctk.StringVar(value=str(self.cfg.random_seed))
+        ctk.CTkEntry(seed_row, textvariable=seed_sv, width=100).pack(side="left")
+        seed_sv.trace_add("write", lambda *_: self._update_seed(seed_sv))
+        add_tooltip(seed_row,
+                    "Integer seed for the train/val/test split. "
+                    "Same seed → same split every time.")
+
+    def _update_ratio(self, attr: str, sv: ctk.StringVar):
         try:
             setattr(self.cfg, attr, float(sv.get()) / 100.0)
+        except ValueError:
+            pass
+        # Update live total indicator
+        try:
+            total = round(self.cfg.train_ratio + self.cfg.val_ratio + self.cfg.test_ratio, 4)
+            ok    = abs(total - 1.0) < 0.01
+            self._ratio_sum_lbl.configure(
+                text=f"Total: {total*100:.0f} %",
+                text_color=SUCCESS if ok else WARNING,
+            )
+        except Exception:
+            pass
+
+    def _update_seed(self, sv: ctk.StringVar):
+        try:
+            self.cfg.random_seed = int(sv.get())
         except ValueError:
             pass
 

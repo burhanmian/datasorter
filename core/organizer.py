@@ -198,7 +198,12 @@ class Organizer:
                 ds.save_as(str(tmp_path))
                 src_to_transfer = tmp_path
             except Exception as exc:
-                log.warning("Anonymization failed for %s: %s", fpath.name, exc)
+                log.warning(
+                    "Anonymization SKIPPED for %s (file NOT anonymized): %s",
+                    fpath.name, exc,
+                )
+                if self.on_log:
+                    self.on_log(f"⚠ Anon skipped: {fpath.name} — {exc}")
                 tmp_path = None
                 src_to_transfer = fpath
 
@@ -262,7 +267,7 @@ class Organizer:
             "study_date":                 meta.study_date,
             "series_uid":                 meta.series_instance_uid,
             "series_number":              meta.series_number,
-            "slice_count":                "",
+            "slice_count":                self._get_slice_count(fpath),
             "rows":                       meta.rows,
             "columns":                    meta.columns,
             "pixel_spacing_x":            meta.pixel_spacing_x,
@@ -289,6 +294,16 @@ class Organizer:
             return [arr[0], arr[arr.shape[0] // 2], arr[-1]]
         except Exception:
             return []
+
+    def _get_slice_count(self, fpath: Path) -> str:
+        """Read NumberOfFrames tag without loading pixel data."""
+        try:
+            ds = pydicom.dcmread(str(fpath), force=True, stop_before_pixels=True)
+            if hasattr(ds, "NumberOfFrames"):
+                return str(int(str(ds.NumberOfFrames)))
+            return "1"
+        except Exception:
+            return ""
 
     def _build_rel_path(
         self,
