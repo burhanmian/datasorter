@@ -134,8 +134,16 @@ def _metadata_detect(meta: DicomMetadata) -> dict[str, float]:
     Check DICOM tags in priority order.
     Returns merged score dict.
     """
+    combined: dict[str, float] = {}
+
+    # BodyPartExamined is the authoritative DICOM tag — any keyword hit → 0.95
+    bpe = (meta.body_part_examined or "").strip()
+    if bpe and bpe.upper() not in ("", "UNKNOWN", "N/A"):
+        bpe_scores = _score_text_against_keywords(bpe)
+        for part, _ in bpe_scores.items():
+            combined[part] = max(combined.get(part, 0.0), 0.95)
+
     tag_weights = [
-        (meta.body_part_examined, 1.0),
         (meta.study_description, 0.85),
         (meta.series_description, 0.80),
         (meta.protocol_name, 0.75),
@@ -143,7 +151,6 @@ def _metadata_detect(meta: DicomMetadata) -> dict[str, float]:
         (meta.performed_procedure_step_description, 0.65),
     ]
 
-    combined: dict[str, float] = {}
     for text, weight in tag_weights:
         if not text or text.upper() in ("", "UNKNOWN", "N/A"):
             continue
