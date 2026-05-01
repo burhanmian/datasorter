@@ -1,14 +1,21 @@
 #!/bin/bash
 # ============================================================
-#  DICOM Organizer — Build Linux/macOS Installer
-#  Run this once. Output: dist/DICOM_Organizer_Setup (~20 MB)
+#  DICOM Organizer — Build Linux/macOS Setup binary
+#  Run this once. Output: dist/DICOM_Organizer_Setup
+#
+#  How the setup binary works:
+#    1. User places DICOM_Organizer_Setup in any folder.
+#    2. Run it — installer GUI opens.
+#    3. Default install path = same folder as the binary.
+#    4. Installer creates a venv, installs packages, then launches
+#       DICOM Organizer which asks where to sort DICOM files.
 # ============================================================
 
 set -e
 
 echo ""
 echo "  ===================================================="
-echo "   DICOM Organizer — Building Installer"
+echo "   DICOM Organizer — Building Setup binary"
 echo "  ===================================================="
 echo ""
 
@@ -22,24 +29,14 @@ fi
 echo "  [1/3] Installing PyInstaller..."
 python3 -m pip install pyinstaller --quiet --upgrade
 
+# Clean previous artefacts
+rm -rf build
+rm -f dist/DICOM_Organizer_Setup
+
 echo "  [2/3] Building DICOM_Organizer_Setup..."
 echo ""
 
-python3 -m PyInstaller \
-    --onefile \
-    --windowed \
-    --name "DICOM_Organizer_Setup" \
-    --add-data "gui:gui" \
-    --add-data "core:core" \
-    --add-data "utils:utils" \
-    --add-data "models:models" \
-    --add-data "main.py:." \
-    --add-data "download_model.py:." \
-    --hidden-import "tkinter" \
-    --hidden-import "tkinter.ttk" \
-    --hidden-import "tkinter.filedialog" \
-    --hidden-import "tkinter.messagebox" \
-    installer_gui.py
+python3 -m PyInstaller DICOM_Organizer_Setup.spec --noconfirm --clean
 
 echo ""
 echo "  [3/3] Done!"
@@ -52,7 +49,8 @@ if [ -f "dist/DICOM_Organizer_Setup" ]; then
     echo "   Installer: dist/DICOM_Organizer_Setup"
     echo ""
     echo "   Distribute this single file to users."
-    echo "   Run it to install DICOM Organizer."
+    echo "   They place it in any folder and run it."
+    echo "   Everything installs in that same folder."
     echo "  ===================================================="
 else
     echo "  ERROR: Expected output file not found."

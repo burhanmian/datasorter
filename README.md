@@ -18,37 +18,36 @@ Sorts MRI and CT DICOM files into organised folders automatically — no command
 
 ## Windows Installation
 
-### Step 1 — Install Python
+### Quickest way — Single installer EXE (recommended)
 
-1. Go to https://www.python.org/downloads/
-2. Download Python 3.10 or newer (3.11 recommended)
-3. Run the installer — **check "Add Python to PATH"**
-4. Click "Install Now"
+1. Download `DICOM_Organizer_Setup.exe` from the Releases page.
+2. Place it in **any folder** where you want DICOM Organizer to live
+   (e.g. `C:\Apps\DICOMOrganizer\`).
+3. **Double-click** `DICOM_Organizer_Setup.exe`.
+4. The setup wizard opens. The install path defaults to **the same folder**
+   as the EXE — click **Next** through the pages and then **Install**.
+5. The installer creates a virtual environment, downloads all required
+   packages, and launches DICOM Organizer automatically.
+6. DICOM Organizer starts and asks you to choose the **source folder**
+   (where your DICOM files are) and the **destination folder** (where to
+   put the sorted output). That's it!
 
-Verify installation:
-```
-python --version
-```
+> **No Python installation required** for users — the installer finds or
+> asks for Python on your machine and keeps everything self-contained.
 
-### Step 2 — Download DICOM Organizer
+### Alternative — Run from source
 
-Download or clone this repository to a folder of your choice.
+1. Install Python 3.10+ from https://www.python.org/downloads/
+   — tick **"Add Python to PATH"**.
+2. Clone / download this repository to any folder.
+3. Double-click `run_app.bat` (installs dependencies and launches the app).
+   Or run manually:
+   ```
+   pip install -r requirements.txt
+   python main.py
+   ```
 
-### Step 3 — First-time setup
-
-**Option A — Double-click (easiest):**
-```
-Double-click run_app.bat
-```
-This automatically installs all dependencies and launches the app.
-
-**Option B — Manual install:**
-```
-pip install -r requirements.txt
-python main.py
-```
-
-### Step 4 — AI Model (optional)
+### Step — AI Model (optional)
 
 The AI body part detection model downloads automatically on first run (~45 MB).
 If the download fails, the app falls back to heuristic detection (still works well).

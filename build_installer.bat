@@ -1,14 +1,22 @@
 @echo off
 :: ============================================================
-::  DICOM Organizer — Build Windows Installer
+::  DICOM Organizer — Build Windows Setup EXE
 ::  Run this once on a Windows machine with Python installed.
-::  Output: dist\DICOM_Organizer_Setup.exe  (~15 MB)
+::  Output: dist\DICOM_Organizer_Setup.exe
+::
+::  How the setup EXE works:
+::    1. User places DICOM_Organizer_Setup.exe in any folder.
+::    2. Double-click — installer GUI opens.
+::    3. Default install path = same folder as the EXE (everything
+::       stays together in one place).
+::    4. Installer creates a venv, installs packages, then launches
+::       DICOM Organizer which asks where to sort DICOM files.
 :: ============================================================
 setlocal
 
 echo.
 echo  ====================================================
-echo   DICOM Organizer — Building Windows Installer
+echo   DICOM Organizer — Building Setup EXE
 echo  ====================================================
 echo.
 
@@ -29,24 +37,14 @@ if errorlevel 1 (
     exit /b 1
 )
 
+:: Clean previous artefacts
+if exist build rmdir /s /q build
+if exist "dist\DICOM_Organizer_Setup.exe" del /f "dist\DICOM_Organizer_Setup.exe"
+
 echo  [2/3] Building DICOM_Organizer_Setup.exe...
 echo.
 
-python -m PyInstaller ^
-    --onefile ^
-    --windowed ^
-    --name "DICOM_Organizer_Setup" ^
-    --add-data "gui;gui" ^
-    --add-data "core;core" ^
-    --add-data "utils;utils" ^
-    --add-data "models;models" ^
-    --add-data "main.py;." ^
-    --add-data "download_model.py;." ^
-    --hidden-import "tkinter" ^
-    --hidden-import "tkinter.ttk" ^
-    --hidden-import "tkinter.filedialog" ^
-    --hidden-import "tkinter.messagebox" ^
-    installer_gui.py
+python -m PyInstaller DICOM_Organizer_Setup.spec --noconfirm --clean
 
 if errorlevel 1 (
     echo.
@@ -64,7 +62,8 @@ if exist "dist\DICOM_Organizer_Setup.exe" (
     echo   Installer: dist\DICOM_Organizer_Setup.exe
     echo.
     echo   Distribute this single file to users.
-    echo   Double-click to install DICOM Organizer.
+    echo   They place it in any folder and double-click.
+    echo   Everything installs in that same folder.
     echo  ====================================================
 ) else (
     echo  ERROR: Expected output file not found.
