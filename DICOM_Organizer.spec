@@ -7,13 +7,16 @@ import os
 
 block_cipher = None
 
+_ico = os.path.join('assets', 'icons', 'app_icon.ico')
+_icon = [_ico] if os.path.isfile(_ico) else []
+
 # Paths are relative to the spec file location (repo root)
 a = Analysis(
     ['main.py'],
     pathex=['.'],
     binaries=[],
     datas=[
-        (os.path.join('assets', 'icons', 'app_icon.ico'), os.path.join('assets', 'icons')),
+        *([(_ico, os.path.join('assets', 'icons'))] if os.path.isfile(_ico) else []),
         (os.path.join('assets'), 'assets'),
         (os.path.join('models'), 'models'),
         ('requirements.txt', '.'),
@@ -58,7 +61,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=os.path.join('assets', 'icons', 'app_icon.ico'),
+    icon=_icon,
 )
 
 coll = COLLECT(
