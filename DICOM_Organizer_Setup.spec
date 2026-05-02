@@ -15,6 +15,9 @@ import os
 
 block_cipher = None
 
+_ico = os.path.join('assets', 'icons', 'app_icon.ico')
+_icon = _ico if os.path.isfile(_ico) else None
+
 a = Analysis(
     ['installer_gui.py'],
     pathex=['.'],
@@ -69,5 +72,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=os.path.join('assets', 'icons', 'app_icon.ico'),
+    icon=_icon,
 )

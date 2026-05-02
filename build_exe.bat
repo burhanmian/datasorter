@@ -16,12 +16,16 @@ if %ERRORLEVEL% NEQ 0 (
 if exist build rmdir /s /q build
 if exist dist rmdir /s /q dist
 
+:: Set icon flag only if the icon file exists
+set ICON_FLAG=
+if exist "assets\icons\app_icon.ico" set ICON_FLAG=--icon "assets\icons\app_icon.ico"
+
 echo Building portable one-folder distribution...
 python -m PyInstaller ^
     --name "DICOM_Organizer" ^
     --onedir ^
     --windowed ^
-    --icon "assets\icons\app_icon.ico" ^
+    %ICON_FLAG% ^
     --add-data "requirements.txt;." ^
     --add-data "models;models" ^
     --add-data "assets;assets" ^
